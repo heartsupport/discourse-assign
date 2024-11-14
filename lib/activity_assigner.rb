@@ -42,4 +42,21 @@ module ActivityAssigner
       DiscourseAssign::Assigner.new(post.topic, system_user).unassign
     end
   end
+
+  def self.process_topic_tag(topic_tag)
+    supported_tag = Tag.find_or_create_by(name: "Supported")
+
+    if topic_tag.tag_id == supported_tag.id &&
+         topic_tag&.topic&.category_id.in?(SUPPORT_CATEGORIES)
+      # unassign all users from the topic
+      system_user = User.find_by(username: "system")
+      # find all users assigned to the topic
+      users =
+        Assignment.where(topic_id: topic_tag.topic_id).pluck(:assigned_to_id)
+      users.each do |user_id|
+        # user = User.find(user_id)
+        DiscourseAssign::Assigner.new(topic_tag.topic, system_user).unassign
+      end
+    end
+  end
 end
