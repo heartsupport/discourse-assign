@@ -1157,7 +1157,7 @@ after_initialize do
     end
   end
 
-  ::Topic.class_eval { after_create { ::ActivityAssigner.process_topic(self) } }
+  ::Post.class_eval { after_create { ::ActivityAssigner.process_topic(self) } }
   ::Post.class_eval { after_create { ::ActivityAssigner.process_post(self) } }
   ::TopicTag.class_eval do
     after_create { ::ActivityAssigner.process_topic_tag(self) }

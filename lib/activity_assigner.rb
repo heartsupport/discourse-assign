@@ -1,6 +1,8 @@
 module ActivityAssigner
   SUPPORT_CATEGORIES = [67, 77, 85, 87, 88, 89, 102, 106].freeze
-  def self.process_topic(topic)
+  def self.process_topic(post)
+    return unless post.post_number == 1
+    topic = post.topic
     return unless SUPPORT_CATEGORIES.include?(topic.category_id)
 
     # find two support users and assign the topic to the
