@@ -26,7 +26,7 @@ module ActivityAssigner
       system_user = User.find_by(username: "system")
       user = User.find(group_user["user_id"])
       # assign the topic to the user
-      assign = DiscourseAssign::Assigner.new(topic, system_user).assign(user)
+      assign = Assigner.new(topic, system_user).assign(user)
       unless assign[:success]
         Rails.logger.error("Failed to assign topic #{topic.id} to #{user.id}")
       end
@@ -39,7 +39,7 @@ module ActivityAssigner
       Assignment.find_by(topic_id: post.topic_id, assigned_to_id: post.user_id)
     if assignment
       system_user = User.find_by(username: "system")
-      DiscourseAssign::Assigner.new(post.topic, system_user).unassign
+      Assigner.new(post.topic, system_user).unassign
     end
   end
 
@@ -55,7 +55,7 @@ module ActivityAssigner
         Assignment.where(topic_id: topic_tag.topic_id).pluck(:assigned_to_id)
       users.each do |user_id|
         # user = User.find(user_id)
-        DiscourseAssign::Assigner.new(topic_tag.topic, system_user).unassign
+        Assigner.new(topic_tag.topic, system_user).unassign
       end
     end
   end
