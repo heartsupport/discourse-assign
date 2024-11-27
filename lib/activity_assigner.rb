@@ -20,7 +20,7 @@ module ActivityAssigner
       # Rails.logger.info("========> First post #{post.id} =========")
       # find two support users and assign the topic to the
       #  query the database for the two users
-      assign_swat_user(topic)
+      assign_swat_user(post.topic)
     end
 
     # if !post.is_first_post? && topic.category_id.in?(SUPPORT_CATEGORIES)
