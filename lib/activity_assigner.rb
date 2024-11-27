@@ -16,7 +16,7 @@ module ActivityAssigner
     # Rails.logger.info(
     #   "========> Topic #{topic.id} & Category #{topic.category_id} ========="
     # )
-    if post.is_first_post? && topic.category_id.in?(SUPPORT_CATEGORIES)
+    if post.is_first_post? && post.topic.category_id.in?(SUPPORT_CATEGORIES)
       # Rails.logger.info("========> First post #{post.id} =========")
       # find two support users and assign the topic to the
       #  query the database for the two users
