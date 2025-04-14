@@ -7,10 +7,17 @@ module ActivityAssigner
       assign_support_user(post.topic) if SiteSetting.assign_enabled?
     end
 
-    # if post is a reply from assigned user, unassign the topic and re-assign
-    # to another user
     if !post.is_first_post? && post.topic.category_id.in?(SUPPORT_CATEGORIES)
-      if Assignment
+      # if post user is the assigned to, then unassign and assign another person
+      if post.user_id == post.topic.assigned_to_id
+        # unassign the topic
+        system_user = User.find_by(username: "system")
+        assigner = Assigner.new(post.topic, system_user)
+        assigner.unassign
+
+        # assign to another user
+        assign_support_user(post.topic)
+      end
     end
   end
 
