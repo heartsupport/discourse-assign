@@ -4,15 +4,15 @@
 # about: Provides the ability to assign topics and individual posts to a user or group.
 # meta_topic_id: 58044
 # version: 1.0.1
-# authors: Sam Saffron
-# url: https://github.com/discourse/discourse-assign
+# authors: Sam Saffron , Bengo Acacia Sssembajjwe
+# url: https://github.com/heartsupport/discourse-assign.git
 
 enabled_site_setting :assign_enabled
 
 register_asset "stylesheets/assigns.scss"
 register_asset "stylesheets/mobile/assigns.scss", :mobile
 
-%w[user-plus user-times group-plus group-times].each do |i|
+%w[user-plus user-xmark group-plus group-times].each do |i|
   register_svg_icon(i)
 end
 

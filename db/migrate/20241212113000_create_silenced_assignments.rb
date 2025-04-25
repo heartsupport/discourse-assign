@@ -1,5 +1,5 @@
 # frozen_string_literal: true
-class CreateSilencedAssignments < ActiveRecord::Migration[7.2]
+class CreateSilencedAssignments < ActiveRecord::Migration[7.0]
   def up
     create_table :silenced_assignments do |t|
       t.bigint :assignment_id, null: false
