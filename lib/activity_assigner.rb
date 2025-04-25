@@ -13,10 +13,10 @@ module ActivityAssigner
       if assignment && post.user_id == assignment.assigned_to_id
         system_user = User.find_by(username: "system")
 
-        Assigner.new(post.topic, system_user).unassign
+        Assigner.new(post.topic, system_user).unassign(deactivate: true)
 
-        # assign to another user
-        assign_support_user(post.topic) if SiteSetting.assign_enabled?
+        # # assign to another user
+        # assign_support_user(post.topic) if SiteSetting.assign_enabled?
       end
     end
   end
@@ -31,7 +31,7 @@ module ActivityAssigner
     # find all users assigned to the topic]
     if topic_tag.topic.assignment.present?
       system_user = User.find_by(username: "system")
-      Assigner.new(topic_tag.topic, system_user).unassign
+      Assigner.new(topic_tag.topic, system_user).unassign(deactivate: true)
     end
   end
 

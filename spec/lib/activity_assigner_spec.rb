@@ -74,12 +74,12 @@ RSpec.describe ActivityAssigner do
       group_user = Fabricate(:group_user, group: group, user: user)
       group_user.save!
 
-      reply = # post a reply
-        Fabricate(:post, topic: topic, user: support_user)
+      reply = Fabricate(:post, topic: topic, user: support_user)
       reply.save!
 
       # expect the user to be unassigned
-      expect(reply.topic.reload&.assignment&.assigned_to).to eq(user)
+      expect(reply.topic.reload&.assignment&.assigned_to).to eq(support_user)
+      expect(reply.topic.reload.assignment.active).to be_falsey
     end
 
     it 'removes assignment when the topic is tagged with "Supported"' do
@@ -88,7 +88,7 @@ RSpec.describe ActivityAssigner do
       post.topic.tags << Tag.find_or_create_by(name: "Supported")
       post.topic.save!
 
-      expect(post.topic.reload.assignment).to be_nil
+      expect(post.topic.reload.assignment.active).to be_falsey
     end
   end
 end
