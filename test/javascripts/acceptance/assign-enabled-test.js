@@ -1,5 +1,6 @@
 import { click, fillIn, visit } from "@ember/test-helpers";
 import { test } from "qunit";
+import { cloneJSON } from "discourse/lib/object";
 import userFixtures from "discourse/tests/fixtures/user-fixtures";
 import pretender, {
   parsePostData,
@@ -10,12 +11,11 @@ import {
   updateCurrentUser,
 } from "discourse/tests/helpers/qunit-helpers";
 import selectKit from "discourse/tests/helpers/select-kit-helper";
-import { cloneJSON } from "discourse-common/lib/object";
 
 acceptance("Discourse Assign | Assign mobile", function (needs) {
   needs.user();
   needs.mobileView();
-  needs.settings({ glimmer_post_menu_mode: "enabled", assign_enabled: true });
+  needs.settings({ assign_enabled: true });
 
   needs.pretender((server, helper) => {
     server.get("/assign/suggestions", () => {
@@ -39,20 +39,15 @@ acceptance("Discourse Assign | Assign mobile", function (needs) {
   test("Footer dropdown contains button", async function (assert) {
     updateCurrentUser({ can_assign: true });
     await visit("/t/internationalization-localization/280");
-    const menu = selectKit(".topic-footer-mobile-dropdown");
-    await menu.expand();
-
-    assert.true(menu.rowByValue("assign").exists());
-    await menu.selectRowByValue("assign");
+    await click(".topic-footer-mobile-dropdown-trigger");
+    await click(".assign");
     assert.dom(".assign.d-modal").exists("assign modal opens");
   });
 });
 
 acceptance("Discourse Assign | Assign desktop", function (needs) {
-  needs.user({
-    can_assign: true,
-  });
-  needs.settings({ glimmer_post_menu_mode: "enabled", assign_enabled: true });
+  needs.user({ can_assign: true });
+  needs.settings({ assign_enabled: true });
 
   needs.pretender((server, helper) => {
     server.get("/assign/suggestions", () => {
@@ -126,7 +121,6 @@ acceptance("Discourse Assign | Assign Status enabled", function (needs) {
     can_assign: true,
   });
   needs.settings({
-    glimmer_post_menu_mode: "enabled",
     assign_enabled: true,
     enable_assign_status: true,
     assign_statuses: "New|In Progress|Done",
@@ -189,7 +183,6 @@ acceptance("Discourse Assign | Assign Status disabled", function (needs) {
     can_assign: true,
   });
   needs.settings({
-    glimmer_post_menu_mode: "enabled",
     assign_enabled: true,
     enable_assign_status: false,
   });
@@ -250,7 +243,6 @@ const remindersFrequency = [
 acceptance("Discourse Assign | User preferences", function (needs) {
   needs.user({ can_assign: true, reminders_frequency: remindersFrequency });
   needs.settings({
-    glimmer_post_menu_mode: "enabled",
     assign_enabled: true,
     remind_assigns_frequency: 43200,
   });
@@ -297,7 +289,6 @@ acceptance(
   function (needs) {
     needs.user({ can_assign: true, reminders_frequency: remindersFrequency });
     needs.settings({
-      glimmer_post_menu_mode: "enabled",
       assign_enabled: true,
       remind_assigns_frequency: 43200,
     });

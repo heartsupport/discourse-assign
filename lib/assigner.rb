@@ -322,20 +322,26 @@ class ::Assigner
 
     first_post.publish_change_to_clients!(:revised, reload_topic: true)
     queue_notification(assignment) if should_notify
+
+    # This assignment should never be notified
+    SilencedAssignment.create!(assignment_id: assignment.id) if !should_notify
+
     publish_assignment(assignment, assign_to, note, status)
 
     if assignment.assigned_to_user?
-      if !TopicUser.exists?(
-           user_id: assign_to.id,
-           topic_id: topic.id,
-           notification_level: TopicUser.notification_levels[:watching],
-         )
-        TopicUser.change(
-          assign_to.id,
-          topic.id,
-          notification_level: TopicUser.notification_levels[:watching],
-          notifications_reason_id: TopicUser.notification_reasons[:plugin_changed],
-        )
+      if !assign_to.user_option.do_nothing_when_assigned?
+        notification_level =
+          if assign_to.user_option.track_topic_when_assigned?
+            TopicUser.notification_levels[:tracking]
+          else
+            TopicUser.notification_levels[:watching]
+          end
+
+        topic_user = TopicUser.find_by(user_id: assign_to.id, topic:)
+        if !topic_user || topic_user.notification_level < notification_level
+          notifications_reason_id = TopicUser.notification_reasons[:plugin_changed]
+          TopicUser.change(assign_to.id, topic.id, notification_level:, notifications_reason_id:)
+        end
       end
 
       if SiteSetting.assign_mailer == AssignMailer.levels[:always] ||
@@ -399,9 +405,7 @@ class ::Assigner
       if SiteSetting.unassign_creates_tracking_post && !silent
         post_type = SiteSetting.assigns_public ? Post.types[:small_action] : Post.types[:whisper]
 
-        custom_fields = {
-          "action_code_who" => assigned_to.is_a?(User) ? assigned_to.username : assigned_to.name,
-        }
+        custom_fields = small_action_username_or_name(assigned_to)
 
         if post_target?
           custom_fields.merge!("action_code_path" => "/p/#{@target.id}")
@@ -487,10 +491,20 @@ class ::Assigner
     Jobs.enqueue(:assign_notification, assignment_id: assignment.id)
   end
 
+  def small_action_username_or_name(assign_to)
+    if (assign_to.is_a?(User) && SiteSetting.prioritize_full_name_in_ux) ||
+         !assign_to.try(:username)
+      custom_fields = { "action_code_who" => assign_to.name || assign_to.username }
+    else
+      custom_fields = {
+        "action_code_who" => assign_to.is_a?(User) ? assign_to.username : assign_to.name,
+      }
+    end
+    custom_fields
+  end
+
   def add_small_action_post(action_code, assign_to, text)
-    custom_fields = {
-      "action_code_who" => assign_to.is_a?(User) ? assign_to.username : assign_to.name,
-    }
+    custom_fields = small_action_username_or_name(assign_to)
 
     if post_target?
       custom_fields.merge!(
@@ -502,6 +516,7 @@ class ::Assigner
       @assigned_by,
       text,
       bump: false,
+      auto_track: false,
       post_type: SiteSetting.assigns_public ? Post.types[:small_action] : Post.types[:whisper],
       action_code: action_code,
       custom_fields: custom_fields,
@@ -547,16 +562,7 @@ class ::Assigner
   end
 
   def already_assigned?(assign_to, type, note, status)
-    return true if assignment_eq?(@target.assignment, assign_to, type, note, status)
-
-    # Check if the user is not assigned to any of the posts from the topic
-    # they will be assigned to.
-    if @target.is_a?(Topic)
-      assignments = Assignment.where(topic_id: topic.id, target_type: "Post", active: true)
-      return true if assignments.any? { |a| assignment_eq?(a, assign_to, type, note, status) }
-    end
-
-    false
+    assignment_eq?(@target.assignment, assign_to, type, note, status)
   end
 
   def reassign?

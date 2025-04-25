@@ -24,6 +24,8 @@ require_relative "lib/discourse_assign/engine"
 require_relative "lib/validators/assign_statuses_validator"
 
 after_initialize do
+  UserUpdater::OPTION_ATTR.push(:notification_level_when_assigned)
+
   reloadable_patch do |plugin|
     Group.prepend(DiscourseAssign::GroupExtension)
     ListController.prepend(DiscourseAssign::ListControllerExtension)
@@ -31,6 +33,15 @@ after_initialize do
     Topic.prepend(DiscourseAssign::TopicExtension)
     WebHook.prepend(DiscourseAssign::WebHookExtension)
     Notification.prepend(DiscourseAssign::NotificationExtension)
+    UserOption.prepend(DiscourseAssign::UserOptionExtension)
+  end
+
+  add_to_serializer(:user_option, :notification_level_when_assigned) do
+    object.notification_level_when_assigned
+  end
+
+  add_to_serializer(:current_user_option, :notification_level_when_assigned) do
+    object.notification_level_when_assigned
   end
 
   register_group_param(:assignable_level)
@@ -183,7 +194,7 @@ after_initialize do
     Site.preloaded_category_custom_fields << "enable_unassigned_filter"
   end
 
-  BookmarkQuery.on_preload do |bookmarks, bookmark_query|
+  BookmarkQuery.on_preload do |bookmarks, _bookmark_query|
     if SiteSetting.assign_enabled?
       topics =
         Bookmark
@@ -203,8 +214,10 @@ after_initialize do
           .index_by(&:topic_id)
 
       topics.each do |topic|
-        assigned_to = assignments[topic.id]&.assigned_to
-        topic.preload_assigned_to(assigned_to)
+        assignment = assignments[topic.id]
+        # NOTE: preloading to `nil` is necessary to avoid N+1 queries
+        topic.preload_assigned_to(assignment&.assigned_to)
+        topic.preload_assignment_status(assignment&.status)
       end
     end
   end
@@ -217,119 +230,112 @@ after_initialize do
   end
 
   TopicList.on_preload do |topics, topic_list|
-    if SiteSetting.assign_enabled?
-      can_assign =
-        topic_list.current_user && topic_list.current_user.can_assign?
-      allowed_access = SiteSetting.assigns_public || can_assign
+    next unless SiteSetting.assign_enabled?
 
-      if allowed_access && topics.length > 0
-        assignments =
-          Assignment
-            .strict_loading
-            .active
-            .where(topic: topics)
-            .includes(:target, :assigned_to)
-        assignments_map = assignments.group_by(&:topic_id)
+    can_assign = topic_list.current_user&.can_assign?
+    allowed_access = SiteSetting.assigns_public || can_assign
 
-        user_ids =
-          assignments
-            .filter { |assignment| assignment.assigned_to_user? }
-            .map(&:assigned_to_id)
-        users_map =
-          User
-            .where(id: user_ids)
-            .select(UserLookup.lookup_columns)
-            .index_by(&:id)
+    next if !allowed_access || topics.empty?
 
-        group_ids =
-          assignments
-            .filter { |assignment| assignment.assigned_to_group? }
-            .map(&:assigned_to_id)
-        groups_map = Group.where(id: group_ids).index_by(&:id)
+    assignments =
+      Assignment
+        .strict_loading
+        .active
+        .where(topic: topics)
+        .includes(:target, :assigned_to)
+    assignments_map = assignments.group_by(&:topic_id)
 
-        topics.each do |topic|
-          assignments = assignments_map[topic.id]
-          direct_assignment =
-            assignments&.find do |assignment|
-              assignment.target_type == "Topic" &&
-                assignment.target_id == topic.id
-            end
-          indirectly_assigned_to = {}
-          assignments
-            &.each do |assignment|
-              next if assignment.target_type == "Topic"
-              next if !assignment.target
-              next(
-                indirectly_assigned_to[assignment.target_id] = {
-                  assigned_to: users_map[assignment.assigned_to_id],
-                  post_number: assignment.target.post_number
-                }
-              ) if assignment&.assigned_to_user?
-              next(
-                indirectly_assigned_to[assignment.target_id] = {
-                  assigned_to: groups_map[assignment.assigned_to_id],
-                  post_number: assignment.target.post_number
-                }
-              ) if assignment&.assigned_to_group?
-            end
-            &.compact
-            &.uniq
+    user_ids = assignments.filter(&:assigned_to_user?).map(&:assigned_to_id)
+    users_map =
+      User.where(id: user_ids).select(UserLookup.lookup_columns).index_by(&:id)
 
-          assigned_to =
-            if direct_assignment&.assigned_to_user?
-              users_map[direct_assignment.assigned_to_id]
-            elsif direct_assignment&.assigned_to_group?
-              groups_map[direct_assignment.assigned_to_id]
-            end
-          topic.preload_assigned_to(assigned_to)
-          topic.preload_indirectly_assigned_to(indirectly_assigned_to)
+    group_ids =
+      assignments
+        .filter { |assignment| assignment.assigned_to_group? }
+        .map(&:assigned_to_id)
+    groups_map = Group.where(id: group_ids).index_by(&:id)
+
+    topics.each do |topic|
+      if assignments = assignments_map[topic.id]
+        topic_assignments, post_assignments =
+          assignments.partition { _1.target_type == "Topic" }
+
+        direct_assignment = topic_assignments.find { _1.target_id == topic.id }
+
+        indirectly_assigned_to = {}
+
+        post_assignments.each do |assignment|
+          next unless assignment.target
+
+          if assignment.assigned_to_user?
+            indirectly_assigned_to[assignment.target_id] = {
+              assigned_to: users_map[assignment.assigned_to_id],
+              post_number: assignment.target.post_number
+            }
+          elsif assignment.assigned_to_group?
+            indirectly_assigned_to[assignment.target_id] = {
+              assigned_to: groups_map[assignment.assigned_to_id],
+              post_number: assignment.target.post_number
+            }
+          end
         end
+
+        assigned_to =
+          if direct_assignment&.assigned_to_user?
+            users_map[direct_assignment.assigned_to_id]
+          elsif direct_assignment&.assigned_to_group?
+            groups_map[direct_assignment.assigned_to_id]
+          end
       end
+
+      # NOTE: preloading to `nil` is necessary to avoid N+1 queries
+      topic.preload_assigned_to(assigned_to)
+      topic.preload_assignment_status(direct_assignment&.status)
+      topic.preload_indirectly_assigned_to(indirectly_assigned_to)
     end
   end
 
   Search.on_preload do |results, search|
-    if SiteSetting.assign_enabled?
-      can_assign = search.guardian&.can_assign?
-      allowed_access = SiteSetting.assigns_public || can_assign
+    next unless SiteSetting.assign_enabled?
 
-      if allowed_access && results.posts.length > 0
-        topics = results.posts.map(&:topic)
-        assignments =
-          Assignment
-            .strict_loading
-            .where(topic: topics, active: true)
-            .includes(:assigned_to, :target)
-            .group_by(&:topic_id)
+    can_assign = search.guardian&.can_assign?
+    allowed_access = SiteSetting.assigns_public || can_assign
 
-        results.posts.each do |post|
-          topic_assignments = assignments[post.topic.id]
-          direct_assignment =
-            topic_assignments&.find do |assignment|
-              assignment.target_type == "Topic"
-            end
-          indirect_assignments =
-            topic_assignments&.select do |assignment|
-              assignment.target_type == "Post"
-            end
+    next if !allowed_access || results.posts.empty?
 
-          post.topic.preload_assigned_to(direct_assignment&.assigned_to)
-          post.topic.preload_indirectly_assigned_to(nil)
-          if indirect_assignments.present?
-            indirect_assignment_map =
-              indirect_assignments.reduce({}) do |acc, assignment|
-                if assignment.target
-                  acc[assignment.target_id] = {
-                    assigned_to: assignment.assigned_to,
-                    post_number: assignment.target.post_number
-                  }
-                end
-                acc
-              end
-            post.topic.preload_indirectly_assigned_to(indirect_assignment_map)
-          end
+    topics = results.posts.map(&:topic)
+
+    assignments =
+      Assignment
+        .strict_loading
+        .active
+        .where(topic: topics)
+        .includes(:assigned_to, :target)
+        .group_by(&:topic_id)
+
+    results.posts.each do |post|
+      if topic_assignments = assignments[post.topic_id]
+        direct_assignment = topic_assignments.find { _1.target_type == "Topic" }
+        indirect_assignments =
+          topic_assignments.select { _1.target_type == "Post" }
+      end
+
+      if indirect_assignments.present?
+        indirect_assignment_map = {}
+
+        indirect_assignments.each do |assignment|
+          next unless assignment.target
+          indirect_assignment_map[assignment.target_id] = {
+            assigned_to: assignment.assigned_to,
+            post_number: assignment.target.post_number
+          }
         end
       end
+
+      # NOTE: preloading to `nil` is necessary to avoid N+1 queries
+      post.topic.preload_assigned_to(direct_assignment&.assigned_to)
+      post.topic.preload_assignment_status(direct_assignment&.status)
+      post.topic.preload_indirectly_assigned_to(indirect_assignment_map)
     end
   end
 
@@ -508,6 +514,13 @@ after_initialize do
     @assigned_to = assignment.assigned_to if assignment&.active
   end
 
+  add_to_class(:topic, :assignment_status) do
+    return @assignment_status if defined?(@assignment_status)
+    @assignment_status =
+      assignment.status if SiteSetting.enable_assign_status &&
+      assignment&.active
+  end
+
   add_to_class(:topic, :indirectly_assigned_to) do
     return @indirectly_assigned_to if defined?(@indirectly_assigned_to)
     @indirectly_assigned_to =
@@ -531,6 +544,10 @@ after_initialize do
 
   add_to_class(:topic, :preload_assigned_to) do |assigned_to|
     @assigned_to = assigned_to
+  end
+
+  add_to_class(:topic, :preload_assignment_status) do |assignment_status|
+    @assignment_status = assignment_status
   end
 
   add_to_class(
@@ -617,9 +634,9 @@ after_initialize do
     include_condition: -> do
       SiteSetting.enable_assign_status &&
         (SiteSetting.assigns_public || scope.can_assign?) &&
-        object.topic.assignment.present?
+        object.topic.assignment_status.present?
     end
-  ) { object.topic.assignment.status }
+  ) { object.topic.assignment_status }
 
   # SuggestedTopic serializer
   add_to_serializer(
@@ -709,9 +726,9 @@ after_initialize do
     include_condition: -> do
       SiteSetting.enable_assign_status &&
         (SiteSetting.assigns_public || scope.can_assign?) &&
-        object.assignment.present?
+        object.assignment_status.present?
     end
-  ) { object.assignment.status }
+  ) { object.assignment_status }
 
   # SearchTopicListItem serializer
   add_to_serializer(
@@ -1083,37 +1100,51 @@ after_initialize do
     Assignment.active_for_group(group).destroy_all
   end
 
-  register_search_advanced_filter(/in:assigned/) do |posts|
-    posts.where(<<~SQL) if @guardian.can_assign?
-        topics.id IN (
-          SELECT a.topic_id FROM assignments a WHERE a.active
-        )
+  add_filter_custom_filter("assigned") do |scope, filter_values, guardian|
+    next if !guardian.can_assign? || filter_values.blank?
+
+    user_or_group_name = filter_values.compact.first
+
+    next if user_or_group_name.blank?
+
+    if user_id = User.find_by_username(user_or_group_name)&.id
+      scope.where(<<~SQL, user_id)
+        topics.id IN (SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'User' AND a.active)
       SQL
+    elsif group_id = Group.find_by(name: user_or_group_name)&.id
+      scope.where(<<~SQL, group_id)
+        topics.id IN (SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'Group' AND a.active)
+      SQL
+    end
+  end
+
+  register_search_advanced_filter(/in:assigned/) do |posts|
+    next if !@guardian.can_assign?
+
+    posts.where(
+      "topics.id IN (SELECT a.topic_id FROM assignments a WHERE a.active)"
+    )
   end
 
   register_search_advanced_filter(/in:unassigned/) do |posts|
-    posts.where(<<~SQL) if @guardian.can_assign?
-        topics.id NOT IN (
-          SELECT a.topic_id FROM assignments a WHERE a.active
-        )
-      SQL
+    next if !@guardian.can_assign?
+
+    posts.where(
+      "topics.id NOT IN (SELECT a.topic_id FROM assignments a WHERE a.active)"
+    )
   end
 
   register_search_advanced_filter(/assigned:(.+)$/) do |posts, match|
-    if @guardian.can_assign?
-      if user_id = User.find_by_username(match)&.id
-        posts.where(<<~SQL, user_id)
-          topics.id IN (
-            SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'User' AND a.active
-          )
-        SQL
-      elsif group_id = Group.find_by_name(match)&.id
-        posts.where(<<~SQL, group_id)
-          topics.id IN (
-            SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'Group' AND a.active
-          )
-        SQL
-      end
+    next if !@guardian.can_assign? || match.blank?
+
+    if user_id = User.find_by_username(match)&.id
+      posts.where(<<~SQL, user_id)
+        topics.id IN (SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'User' AND a.active)
+      SQL
+    elsif group_id = Group.find_by(name: match)&.id
+      posts.where(<<~SQL, group_id)
+        topics.id IN (SELECT a.topic_id FROM assignments a WHERE a.assigned_to_id = ? AND a.assigned_to_type = 'Group' AND a.active)
+      SQL
     end
   end
 

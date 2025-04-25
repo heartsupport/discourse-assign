@@ -105,6 +105,11 @@ tr_TR:
               assignable_levels:
                 title: "Bu grubu kim atayabilir?"
     user:
+      notification_level_when_assigned:
+        label: "Atandığında"
+        watch_topic: "Konuyu izle"
+        track_topic: "Konuyu takip et"
+        do_nothing: "Hiçbir şey yapma"
       messages:
         assigned_title: "Atandı (%{count})"
         assigned: "Atandı"

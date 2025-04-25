@@ -63,13 +63,20 @@ cs:
       reassign_modal:
         title: "Změnit přidělení tématu"
       topic_level_menu:
+        edit_assignments: "Upravit přidělení..."
+        reassign_topic_to_me: "Znovu přiřadit téma mně"
         unassign_with_ellipsis: "Odebrat přidělení..."
+        unassign_from_post: "Zrušit přiřazení @%{assignee} z #%{post_number}"
+        unassign_from_post_help: "Zrušení přiřazení @%{assignee} z příspěvku #%{post_number}"
+        unassign_from_topic: "Zrušit přiřazení @%{username} k tématu"
       assign_modal:
         title: "Zadat téma"
         reassign_title: "Změnit přidělení tématu"
         assign: "Zadat"
         assignee_label: Komu
+        assignment_label: Přiřazení
         choose_assignee: Vyberte uživatele, kterého chcete přidělit.
+        edit_assignments_title: "Upravit přiřazení"
         note_label: Poznámka
         optional_label: "(volitelné)"
         status_label: Stav
@@ -98,6 +105,11 @@ cs:
               assignable_levels:
                 title: "Kdo může přidělit této skupině"
     user:
+      notification_level_when_assigned:
+        label: "Při přidělení"
+        watch_topic: "Hlídat téma"
+        track_topic: "Sledovat téma"
+        do_nothing: "Nic nedělat"
       messages:
         assigned_title: "Přiděleno (%{count})"
         assigned: "Přiděleno"
@@ -180,5 +192,6 @@ cs:
           many: "Seznam přidělení - %{count} nepřečtených přidělení"
           other: "Seznam přidělení - %{count} nepřečtených přidělení"
     edit_assignments_modal:
+      title: "Upravit přiřazení"
       topic: "Témata"
       post: "Příspěvek"

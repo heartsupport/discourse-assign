@@ -1,5 +1,6 @@
-import { visit } from "@ember/test-helpers";
+import { click, visit } from "@ember/test-helpers";
 import { test } from "qunit";
+import { cloneJSON } from "discourse/lib/object";
 import topicFixtures from "discourse/tests/fixtures/topic";
 import {
   acceptance,
@@ -7,8 +8,7 @@ import {
   updateCurrentUser,
 } from "discourse/tests/helpers/qunit-helpers";
 import selectKit from "discourse/tests/helpers/select-kit-helper";
-import { cloneJSON } from "discourse-common/lib/object";
-import I18n from "I18n";
+import { i18n } from "discourse-i18n";
 import NotificationFixture from "../fixtures/notifications-fixtures";
 
 function assignCurrentUserToTopic(needs) {
@@ -173,7 +173,7 @@ acceptance("Discourse Assign | Assigned topic", function (needs) {
 
     assert.strictEqual(
       notification.querySelector("a").title,
-      I18n.t("notifications.titles.assigned"),
+      i18n("notifications.titles.assigned"),
       "with correct title"
     );
     assert.strictEqual(
@@ -220,14 +220,13 @@ acceptance("Discourse Assign | Reassign topic | mobile", function (needs) {
 
   test("Mobile Footer dropdown contains reassign buttons", async function (assert) {
     updateCurrentUser({ can_assign: true });
-    const menu = selectKit(".topic-footer-mobile-dropdown");
 
     await visit("/t/assignment-topic/44");
-    await menu.expand();
+    await click(".topic-footer-mobile-dropdown-trigger");
 
-    assert.true(menu.rowByValue("unassign-mobile").exists());
-    assert.true(menu.rowByValue("reassign-mobile").exists());
-    assert.true(menu.rowByValue("reassign-self-mobile").exists());
+    assert.dom("#topic-footer-button-unassign-mobile").exists();
+    assert.dom("#topic-footer-button-reassign-self-mobile").exists();
+    assert.dom("#topic-footer-button-reassign-mobile").exists();
   });
 });
 

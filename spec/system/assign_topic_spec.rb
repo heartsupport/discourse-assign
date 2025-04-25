@@ -10,7 +10,7 @@ describe "Assign | Assigning topics", type: :system do
 
   before do
     SiteSetting.assign_enabled = true
-
+    SiteSetting.prioritize_full_name_in_ux = false
     # The system tests in this file are flaky and auth token related so turning this on
     SiteSetting.verbose_auth_token_logging = true
 
@@ -47,6 +47,31 @@ describe "Assign | Assigning topics", type: :system do
       expect(assign_modal).to be_closed
       expect(topic_page).to have_assigned(user: staff_user, at_post: 2)
       expect(find("#topic .assigned-to")).to have_content(staff_user.username)
+    end
+
+    context "when prioritize_full_name_in_ux setting is enabled" do
+      before { SiteSetting.prioritize_full_name_in_ux = true }
+
+      it "shows the user's name after assign" do
+        visit "/t/#{topic.id}"
+
+        topic_page.click_assign_topic
+        assign_modal.assignee = staff_user
+        assign_modal.confirm
+        expect(find("#topic .assigned-to")).to have_content(staff_user.name)
+      end
+
+      it "show the user's username if there is no name" do
+        visit "/t/#{topic.id}"
+        staff_user.name = nil
+        staff_user.save
+        staff_user.reload
+
+        topic_page.click_assign_topic
+        assign_modal.assignee = staff_user
+        assign_modal.confirm
+        expect(find("#topic .assigned-to")).to have_content(staff_user.name)
+      end
     end
 
     context "when assigns are not public" do
