@@ -83,12 +83,16 @@ RSpec.describe ActivityAssigner do
     end
 
     it 'removes assignment when the topic is tagged with "Supported"' do
-      post = Fabricate(:post, topic: topic, user: user)
-      post.save!
-      post.topic.tags << Tag.find_or_create_by(name: "Supported")
+      supported_tag = Tag.find_or_create_by(name: "Supported")
+      expect {
+        post = Fabricate(:post, topic: topic, user: user)
+        post.save!
+      }.to change { Assignment.count }.by(1)
+      expect(post.topic.reload&.assignment&.active).to eq(true)
+      post.topic.tags << supported_tag
       post.topic.save!
 
-      expect(post.topic.reload.assignment.active).to be_falsey
+      expect(post.topic.reload.assignment.active).to eq(false)
     end
   end
 end
