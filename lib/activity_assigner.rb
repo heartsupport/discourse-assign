@@ -12,8 +12,8 @@ module ActivityAssigner
       # if post user is the assigned to, then unassign and assign another person
       if assignment && post.user_id == assignment.assigned_to_id
         system_user = User.find_by(username: "system")
-
-        Assigner.new(post.topic, system_user).unassign(deactivate: true)
+        assigner = Assigner.new(post.topic, system_user)
+        assigner.unassign(silent: true, deactivate: true)
 
         # # assign to another user
         # assign_support_user(post.topic) if SiteSetting.assign_enabled?
@@ -22,16 +22,20 @@ module ActivityAssigner
   end
 
   def self.process_topic_tag(topic_tag)
+    topic = topic_tag.topic
+    category_id = topic.category_id
+
     supported_tag = Tag.find_or_create_by(name: "Supported")
 
-    return unless topic_tag.topic.category_id.in?(SUPPORT_CATEGORIES)
+    return unless SUPPORT_CATEGORIES.include?(category_id)
 
     return unless topic_tag.tag_id == supported_tag.id
 
     # find all users assigned to the topic]
-    if topic_tag.topic.assignment.present?
+    if topic.assignment
       system_user = User.find_by(username: "system")
-      Assigner.new(topic_tag.topic, system_user).unassign(deactivate: true)
+      assigner = Assigner.new(topic, system_user)
+      assigner.unassign(silent: true, deactivate: true)
     end
   end
 

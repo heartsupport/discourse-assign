@@ -79,7 +79,7 @@ RSpec.describe ActivityAssigner do
 
       # expect the user to be unassigned
       expect(reply.topic.reload&.assignment&.assigned_to).to eq(support_user)
-      expect(reply.topic.reload.assignment.active).to be_falsey
+      expect(reply.topic.reload.assignment.active).to eq(false)
     end
 
     it 'removes assignment when the topic is tagged with "Supported"' do
